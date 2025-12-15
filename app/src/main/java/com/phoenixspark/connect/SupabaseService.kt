@@ -1,6 +1,7 @@
 package com.phoenixspark.connect
 
 import android.R
+import androidx.compose.ui.graphics.Color
 import com.phoenixspark.connect.data.Link
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -29,6 +30,15 @@ data class TableData(
     val data: List<List<String>>
 )
 
+data class TileConfig(
+    val id: String,
+    val type: String,
+    val color: String,
+    val title: String,
+    val content: Any? = null,  // Can be String, List, or other types
+    val visible: Boolean = true
+)
+
 data class PageCardsResponse(
     val id: String,
     val base_id: String? = null,
@@ -40,6 +50,7 @@ data class PageCardsResponse(
     val show_email: Boolean,
     val show_tables: Boolean,
     val table_data: List<TableData> = emptyList(),
+    val tiles_config: List<TileConfig> = emptyList()
 )
 
 data class OrganizationResponse(
@@ -73,6 +84,146 @@ data class BaseDetailResponse(
     val user_id: String,
     val show_name: Boolean,
 )
+
+// Helper function to convert Tailwind CSS colors to Android Colors
+fun String.toAndroidColor(): Color {
+    // Remove opacity suffix (e.g., "/20")
+    val baseColor = this.split("/")[0]
+
+    return when {
+        baseColor.contains("slate") -> when {
+            baseColor.contains("50") -> Color(0xFFF8FAFC)
+            baseColor.contains("100") -> Color(0xFFF1F5F9)
+            baseColor.contains("200") -> Color(0xFFE2E8F0)
+            baseColor.contains("300") -> Color(0xFFCBD5E1)
+            baseColor.contains("400") -> Color(0xFF94A3B8)
+            baseColor.contains("500") -> Color(0xFF64748B)
+            baseColor.contains("600") -> Color(0xFF475569)
+            baseColor.contains("700") -> Color(0xFF334155)
+            baseColor.contains("800") -> Color(0xFF1E293B)
+            baseColor.contains("900") -> Color(0xFF0F172A)
+            else -> Color(0xFF64748B)
+        }
+        baseColor.contains("sky") -> when {
+            baseColor.contains("50") -> Color(0xFFF0F9FF)
+            baseColor.contains("100") -> Color(0xFFE0F2FE)
+            baseColor.contains("200") -> Color(0xFFBAE6FD)
+            baseColor.contains("300") -> Color(0xFF7DD3FC)
+            baseColor.contains("400") -> Color(0xFF38BDF8)
+            baseColor.contains("500") -> Color(0xFF0EA5E9)
+            baseColor.contains("600") -> Color(0xFF0284C7)
+            baseColor.contains("700") -> Color(0xFF0369A1)
+            baseColor.contains("800") -> Color(0xFF075985)
+            baseColor.contains("900") -> Color(0xFF0C4A6E)
+            else -> Color(0xFF0EA5E9)
+        }
+        baseColor.contains("blue") -> when {
+            baseColor.contains("50") -> Color(0xFFEFF6FF)
+            baseColor.contains("100") -> Color(0xFFDBEAFE)
+            baseColor.contains("200") -> Color(0xFFBFDBFE)
+            baseColor.contains("300") -> Color(0xFF93C5FD)
+            baseColor.contains("400") -> Color(0xFF60A5FA)
+            baseColor.contains("500") -> Color(0xFF3B82F6)
+            baseColor.contains("600") -> Color(0xFF2563EB)
+            baseColor.contains("700") -> Color(0xFF1D4ED8)
+            baseColor.contains("800") -> Color(0xFF1E40AF)
+            baseColor.contains("900") -> Color(0xFF1E3A8A)
+            else -> Color(0xFF3B82F6)
+        }
+        baseColor.contains("rose") || baseColor.contains("red") -> when {
+            baseColor.contains("50") -> Color(0xFFFFF1F2)
+            baseColor.contains("100") -> Color(0xFFFFE4E6)
+            baseColor.contains("200") -> Color(0xFFFECDD3)
+            baseColor.contains("300") -> Color(0xFFFDA4AF)
+            baseColor.contains("400") -> Color(0xFFFB7185)
+            baseColor.contains("500") -> Color(0xFFF43F5E)
+            baseColor.contains("600") -> Color(0xFFE11D48)
+            baseColor.contains("700") -> Color(0xFFBE123C)
+            baseColor.contains("800") -> Color(0xFF9F1239)
+            baseColor.contains("900") -> Color(0xFF881337)
+            else -> Color(0xFFEF4444)
+        }
+        baseColor.contains("green") || baseColor.contains("emerald") -> when {
+            baseColor.contains("50") -> Color(0xFFF0FDF4)
+            baseColor.contains("100") -> Color(0xFFDCFCE7)
+            baseColor.contains("200") -> Color(0xFFBBF7D0)
+            baseColor.contains("300") -> Color(0xFF86EFAC)
+            baseColor.contains("400") -> Color(0xFF4ADE80)
+            baseColor.contains("500") -> Color(0xFF22C55E)
+            baseColor.contains("600") -> Color(0xFF16A34A)
+            baseColor.contains("700") -> Color(0xFF15803D)
+            baseColor.contains("800") -> Color(0xFF166534)
+            baseColor.contains("900") -> Color(0xFF14532D)
+            else -> Color(0xFF10B981)
+        }
+        baseColor.contains("yellow") || baseColor.contains("amber") -> when {
+            baseColor.contains("50") -> Color(0xFFFFFBEB)
+            baseColor.contains("100") -> Color(0xFFFEF3C7)
+            baseColor.contains("200") -> Color(0xFFFDE68A)
+            baseColor.contains("300") -> Color(0xFFFCD34D)
+            baseColor.contains("400") -> Color(0xFFFBBF24)
+            baseColor.contains("500") -> Color(0xFFF59E0B)
+            baseColor.contains("600") -> Color(0xFFD97706)
+            baseColor.contains("700") -> Color(0xFFB45309)
+            baseColor.contains("800") -> Color(0xFF92400E)
+            baseColor.contains("900") -> Color(0xFF78350F)
+            else -> Color(0xFFF59E0B)
+        }
+        baseColor.contains("purple") || baseColor.contains("violet") -> when {
+            baseColor.contains("50") -> Color(0xFFFAF5FF)
+            baseColor.contains("100") -> Color(0xFFF3E8FF)
+            baseColor.contains("200") -> Color(0xFFE9D5FF)
+            baseColor.contains("300") -> Color(0xFFD8B4FE)
+            baseColor.contains("400") -> Color(0xFFC084FC)
+            baseColor.contains("500") -> Color(0xFFA855F7)
+            baseColor.contains("600") -> Color(0xFF9333EA)
+            baseColor.contains("700") -> Color(0xFF7E22CE)
+            baseColor.contains("800") -> Color(0xFF6B21A8)
+            baseColor.contains("900") -> Color(0xFF581C87)
+            else -> Color(0xFF8B5CF6)
+        }
+        baseColor.contains("pink") -> when {
+            baseColor.contains("50") -> Color(0xFFFDF2F8)
+            baseColor.contains("100") -> Color(0xFFFCE7F3)
+            baseColor.contains("200") -> Color(0xFFFBCFE8)
+            baseColor.contains("300") -> Color(0xFFF9A8D4)
+            baseColor.contains("400") -> Color(0xFFF472B6)
+            baseColor.contains("500") -> Color(0xFFEC4899)
+            baseColor.contains("600") -> Color(0xFFDB2777)
+            baseColor.contains("700") -> Color(0xFFBE185D)
+            baseColor.contains("800") -> Color(0xFF9D174D)
+            baseColor.contains("900") -> Color(0xFF831843)
+            else -> Color(0xFFEC4899)
+        }
+        baseColor.contains("indigo") -> when {
+            baseColor.contains("50") -> Color(0xFFEEF2FF)
+            baseColor.contains("100") -> Color(0xFFE0E7FF)
+            baseColor.contains("200") -> Color(0xFFC7D2FE)
+            baseColor.contains("300") -> Color(0xFFA5B4FC)
+            baseColor.contains("400") -> Color(0xFF818CF8)
+            baseColor.contains("500") -> Color(0xFF6366F1)
+            baseColor.contains("600") -> Color(0xFF4F46E5)
+            baseColor.contains("700") -> Color(0xFF4338CA)
+            baseColor.contains("800") -> Color(0xFF3730A3)
+            baseColor.contains("900") -> Color(0xFF312E81)
+            else -> Color(0xFF6366F1)
+        }
+        baseColor.contains("teal") || baseColor.contains("cyan") -> when {
+            baseColor.contains("50") -> Color(0xFFF0FDFA)
+            baseColor.contains("100") -> Color(0xFFCCFBF1)
+            baseColor.contains("200") -> Color(0xFF99F6E4)
+            baseColor.contains("300") -> Color(0xFF5EEAD4)
+            baseColor.contains("400") -> Color(0xFF2DD4BF)
+            baseColor.contains("500") -> Color(0xFF14B8A6)
+            baseColor.contains("600") -> Color(0xFF0D9488)
+            baseColor.contains("700") -> Color(0xFF0F766E)
+            baseColor.contains("800") -> Color(0xFF115E59)
+            baseColor.contains("900") -> Color(0xFF134E4A)
+            else -> Color(0xFF14B8A6)
+        }
+        else -> Color(0xFF6366F1) // Default indigo
+    }
+}
 
 // API interface for Supabase REST API
 interface SupabaseApiService {
@@ -181,16 +332,4 @@ object SupabaseClient {
             throw e
         }
     }
-//    suspend fun getOrganizationsByBase(id: String): List<OrganizationResponse> {
-//        return try {
-//            apiService.getAllOrganizationsByBase(
-//                apiKey = SUPABASE_ANON_KEY,
-//                authorization = "Bearer $SUPABASE_ANON_KEY"
-//            )
-//        } catch (e: Exception) {
-//            println("Error fetching bases: ${e.message}")
-//            emptyList()
-//        }
-//    }
-
 }

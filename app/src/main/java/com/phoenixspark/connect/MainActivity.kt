@@ -36,8 +36,12 @@ import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import com.google.gson.reflect.TypeToken
+import com.phoenixspark.connect.data.repository.DataRepository
+import com.phoenixspark.connect.ui.components.OfflineBanner
 import com.phoenixspark.connect.ui.screens.BaseDetailScreen
+import com.phoenixspark.connect.ui.screens.BaseDetailScreenWithOffline
 import com.phoenixspark.connect.ui.theme.ConnectTheme
+import com.phoenixspark.connect.utils.NetworkMonitor
 
 // Updated Base data class to match Supabase response
 @Serializable
@@ -87,15 +91,24 @@ enum class AppMode {
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var networkMonitor: NetworkMonitor
+    private lateinit var dataRepository: DataRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        networkMonitor = NetworkMonitor(this)
+        dataRepository = DataRepository(this)
+
         setContent {
             var isDarkTheme by remember { mutableStateOf(true) }
 
             ConnectTheme(darkTheme = isDarkTheme) {
-                AppNavigation(
+                AppNavigationWithOffline(  // ← Changed from AppNavigation
                     isDarkTheme = isDarkTheme,
-                    onThemeChange = { isDarkTheme = it }
+                    onThemeChange = { isDarkTheme = it },
+                    networkMonitor = networkMonitor,
+                    dataRepository = dataRepository
                 )
             }
         }
@@ -103,69 +116,163 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
-    val context = LocalContext.current
+fun AppNavigationWithOffline(
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit,
+    networkMonitor: NetworkMonitor,
+    dataRepository: DataRepository
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val storageManager = remember { BaseStorageManager(context) }
     var selectedBase by remember { mutableStateOf<Base?>(null) }
     var appMode by remember { mutableStateOf(AppMode.SELECTION) }
     var savedBases by remember { mutableStateOf<List<Base>>(emptyList()) }
-//    var isDarkTheme by remember { mutableStateOf(true) }
 
-    // Check for saved bases on startup
+    // Network state
+    val isOnline by networkMonitor.observeNetworkState().collectAsState(initial = networkMonitor.isNetworkAvailable())
+    var lastUpdateTime by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Load saved bases and last update time on startup
     LaunchedEffect(Unit) {
         savedBases = storageManager.getSavedBases()
+        lastUpdateTime = dataRepository.getLastUpdateTime()
+
         if (savedBases.isNotEmpty()) {
             appMode = AppMode.SAVED_BASES
+
+            // If online, sync data in background
+            if (networkMonitor.isNetworkAvailable()) {
+                scope.launch {
+                    try {
+                        dataRepository.syncAllData(savedBases)
+                        lastUpdateTime = System.currentTimeMillis()
+                    } catch (e: Exception) {
+                        println("Background sync failed: ${e.message}")
+                    }
+                }
+            }
         }
     }
 
-    when (appMode) {
-        AppMode.SELECTION -> {
-            DirectoryScreen(
-                isSelectionMode = true,
-                preSelectedBases = savedBases, // Pass saved bases for editing
-                onBaseClick = { /* Not used in selection mode */ },
-                onBasesSelected = { selectedBasesList ->
-                    storageManager.saveBases(selectedBasesList)
-                    savedBases = selectedBasesList
-                    appMode = AppMode.SAVED_BASES
-                }
-            )
+    // Auto-sync when network comes back online
+    LaunchedEffect(isOnline) {
+        if (isOnline && savedBases.isNotEmpty()) {
+            try {
+                dataRepository.syncAllData(savedBases)
+                lastUpdateTime = System.currentTimeMillis()
+            } catch (e: Exception) {
+                println("Auto-sync failed: ${e.message}")
+            }
         }
+    }
 
-        AppMode.SAVED_BASES -> {
-            SavedBasesScreen(
-                savedBases = savedBases.sortedBy { it.name },
-                onBaseSelected = { base ->
-                    selectedBase = base
-                    appMode = AppMode.BASE_DETAIL
-                },
-                onManageBases = {
-                    appMode = AppMode.SELECTION
-                },
-                onClearBases = {
-                    storageManager.clearSavedBases()
-                    savedBases = emptyList()
-                    appMode = AppMode.SELECTION
-                },
-                isDarkTheme = isDarkTheme,
-                onThemeChange = onThemeChange
-            )
-        }
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Main content
+        when (appMode) {
+            AppMode.SELECTION -> {
+                DirectoryScreenWithOffline(
+                    isSelectionMode = true,
+                    preSelectedBases = savedBases,
+                    onBaseClick = { /* Not used in selection mode */ },
+                    onBasesSelected = { selectedBasesList ->
+                        scope.launch {
+                            storageManager.saveBases(selectedBasesList)
+                            savedBases = selectedBasesList
 
-        AppMode.BASE_DETAIL -> {
-            selectedBase?.let { base ->
-                BaseDetailScreen(
-                    base = base,
-                    onBackPressed = {
-                        selectedBase = null
-                        appMode = AppMode.SAVED_BASES
-                    }
+                            // Sync data immediately after selection
+                            if (networkMonitor.isNetworkAvailable()) {
+                                try {
+                                    dataRepository.syncAllData(selectedBasesList)
+                                    lastUpdateTime = System.currentTimeMillis()
+                                } catch (e: Exception) {
+                                    println("Initial sync failed: ${e.message}")
+                                }
+                            }
+
+                            appMode = AppMode.SAVED_BASES
+                        }
+                    },
+                    networkMonitor = networkMonitor,
+                    dataRepository = dataRepository
                 )
+            }
+
+            AppMode.SAVED_BASES -> {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    OfflineBanner(
+                        isOffline = !isOnline,
+                        lastUpdateTime = lastUpdateTime,
+                        onRefresh = {
+                            if (networkMonitor.isNetworkAvailable()) {
+                                scope.launch {
+                                    try {
+                                        dataRepository.syncAllData(savedBases)
+                                        lastUpdateTime = System.currentTimeMillis()
+                                    } catch (e: Exception) {
+                                        println("Manual sync failed: ${e.message}")
+                                    }
+                                }
+                            }
+                        }
+                    )
+
+                    SavedBasesScreen(
+                        savedBases = savedBases.sortedBy { it.name },
+                        onBaseSelected = { base ->
+                            selectedBase = base
+                            appMode = AppMode.BASE_DETAIL
+                        },
+                        onManageBases = {
+                            appMode = AppMode.SELECTION
+                        },
+                        onClearBases = {
+                            storageManager.clearSavedBases()
+                            savedBases = emptyList()
+                            appMode = AppMode.SELECTION
+                        },
+                        isDarkTheme = isDarkTheme,
+                        onThemeChange = onThemeChange,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            AppMode.BASE_DETAIL -> {
+                selectedBase?.let { base ->
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        OfflineBanner(
+                            isOffline = !isOnline,
+                            lastUpdateTime = lastUpdateTime,
+                            onRefresh = {
+                                if (networkMonitor.isNetworkAvailable()) {
+                                    scope.launch {
+                                        try {
+                                            dataRepository.syncAllData(savedBases)
+                                            lastUpdateTime = System.currentTimeMillis()
+                                        } catch (e: Exception) {
+                                            println("Manual sync failed: ${e.message}")
+                                        }
+                                    }
+                                }
+                            }
+                        )
+
+                        BaseDetailScreen(
+                            base = base,
+                            onBackPressed = {
+                                selectedBase = null
+                                appMode = AppMode.SAVED_BASES
+                            },
+                            dataRepository = dataRepository,
+                        )
+                    }
+                }
             }
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -546,7 +653,8 @@ fun SavedBasesScreen(
     onManageBases: () -> Unit,
     onClearBases: () -> Unit,
     isDarkTheme: Boolean = true, // Add this parameter
-    onThemeChange: (Boolean) -> Unit = {} // Add this parameter
+    onThemeChange: (Boolean) -> Unit = {}, // Add this parameter
+    modifier: Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -817,5 +925,281 @@ fun VirtualDirectoryTheme(content: @Composable () -> Unit) {
 fun DirectoryScreenPreview() {
     VirtualDirectoryTheme {
         DirectoryScreen()
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DirectoryScreenWithOffline(
+    isSelectionMode: Boolean = false,
+    onBaseClick: (Base) -> Unit = {},
+    onBasesSelected: (List<Base>) -> Unit = {},
+    preSelectedBases: List<Base> = emptyList(),
+    networkMonitor: NetworkMonitor,
+    dataRepository: DataRepository,
+    modifier: Modifier = Modifier
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var bases by remember { mutableStateOf<List<Base>>(emptyList()) }
+    var selectedBases by remember { mutableStateOf<Set<Base>>(preSelectedBases.toSet()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+    val isOnline = networkMonitor.isNetworkAvailable()
+
+    // Function to load bases from Supabase or local database
+    fun loadBases() {
+        scope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                if (isOnline) {
+                    // Try to fetch from network
+                    val response = SupabaseClient.getBases()
+                    bases = response.map { baseResponse ->
+                        Base(
+                            id = baseResponse.id,
+                            name = baseResponse.name,
+                            city = baseResponse.city,
+                            state = baseResponse.state,
+                            active = baseResponse.active
+                        )
+                    }
+                } else {
+                    // Load from local database
+                    dataRepository.getAllBases().collect { localBases ->
+                        bases = localBases
+                    }
+                }
+            } catch (e: Exception) {
+                // If network fetch fails, try local database
+                if (isOnline) {
+                    errorMessage = "Failed to load from server, trying local data..."
+                    try {
+                        dataRepository.getAllBases().collect { localBases ->
+                            bases = localBases
+                            if (bases.isEmpty()) {
+                                errorMessage = "No cached data available. Please connect to internet."
+                            } else {
+                                errorMessage = "Loaded from cache"
+                            }
+                        }
+                    } catch (localError: Exception) {
+                        errorMessage = "Failed to load bases: ${localError.message}"
+                    }
+                } else {
+                    errorMessage = "No internet connection and no cached data"
+                }
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // Load bases when the screen first appears
+    LaunchedEffect(Unit) {
+        loadBases()
+    }
+
+    val filteredItems = bases.sortedBy{ it.name }.filter {
+        it.name.contains(searchQuery, ignoreCase = true) ||
+                it.city.contains(searchQuery, ignoreCase = true) ||
+                it.state.contains(searchQuery, ignoreCase = true)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(8.dp)
+    ) {
+        // Header with gradient background
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(8.dp, RoundedCornerShape(16.dp)),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.background
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.tertiary.copy(0.4f))
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Virtual Directory",
+                                textAlign = TextAlign.Center,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.headlineMedium
+                            )
+                            Text(
+                                text = if (isSelectionMode) {
+                                    if (selectedBases.isEmpty()) "Choose bases to follow" else "${selectedBases.size} bases selected"
+                                } else {
+                                    if (isLoading) "Loading..." else "${filteredItems.size} entries found"
+                                },
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+
+                            // Show offline indicator
+                            if (!isOnline) {
+                                Text(
+                                    text = "Offline - Showing cached data",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+
+                        // Refresh button
+                        IconButton(
+                            onClick = { loadBases() },
+                            enabled = !isLoading && isOnline
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = if (isLoading || !isOnline) Color.Gray else MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Search bar
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search bases...") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = Color(0xFF64748B)
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF6366F1),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color(0xFFFAFAFA)
+                        )
+                    )
+
+                    // Selection mode controls
+                    if (isSelectionMode) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${selectedBases.size} bases selected",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                TextButton(
+                                    onClick = { selectedBases = emptySet() }
+                                ) {
+                                    Text(
+                                        text = "Clear All",
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                }
+
+                                Button(
+                                    onClick = { onBasesSelected(selectedBases.toList()) },
+                                    enabled = selectedBases.isNotEmpty(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.tertiary)
+                                ) {
+                                    Text(
+                                        text = "Save (${selectedBases.size})",
+                                        color = if (selectedBases.size > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(
+                                            0.2f
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Error message
+                    errorMessage?.let { error ->
+                        Text(
+                            text = error,
+                            color = if (error.contains("cache")) MaterialTheme.colorScheme.tertiary else Color.Red,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Loading indicator or directory list
+        if (isLoading && bases.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = Color(0xFF6366F1)
+                )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(filteredItems) { item ->
+                    BaseCard(
+                        base = item,
+                        isSelectionMode = isSelectionMode,
+                        isSelected = selectedBases.contains(item),
+                        onClick = {
+                            if (isSelectionMode) {
+                                selectedBases = if (selectedBases.contains(item)) {
+                                    selectedBases - item
+                                } else {
+                                    selectedBases + item
+                                }
+                            } else {
+                                onBaseClick(item)
+                            }
+                        }
+                    )
+                }
+            }
+        }
     }
 }

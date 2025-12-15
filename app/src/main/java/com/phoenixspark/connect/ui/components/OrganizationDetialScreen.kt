@@ -107,9 +107,7 @@ fun OrganizationDetailScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            organization.primaryColor?.let {
-                                Color(android.graphics.Color.parseColor(it))
-                            } ?: Color.White
+                            Color.White
                         )
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -153,9 +151,7 @@ fun OrganizationDetailScreen(
                         text = organization.name,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = organization.textColor?.let {
-                            Color(it.toColorInt())
-                        } ?: Color(0xFF1E293B),
+                        color = Color(0xFF1E293B),
                         textAlign = TextAlign.Center
                     )
 
@@ -164,17 +160,13 @@ fun OrganizationDetailScreen(
                     Text(
                         text = "Building ${organization.building_number}",
                         fontSize = 14.sp,
-                        color = (organization.textColor?.let {
-                            Color(it.toColorInt())
-                        } ?: Color(0xFF1E293B)).copy(alpha = 0.7f)
+                        color = Color(0xFF1E293B).copy(alpha = 0.7f)
                     )
 
                     Text(
                         text = organization.address ?: "N/A",
                         fontSize = 14.sp,
-                        color = (organization.textColor?.let {
-                            Color(it.toColorInt())
-                        } ?: Color(0xFF1E293B)).copy(alpha = 0.7f),
+                        color = Color(0xFF1E293B).copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 4.dp)
                     )

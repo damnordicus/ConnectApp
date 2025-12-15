@@ -1,8 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("kotlin-kapt")
 }
+
+//val localProperties = Properties()
+//val localPropertiesFile = rootProject.file("local.properties")
+//if(localPropertiesFile.exists()){
+//    localProperties.load(localPropertiesFile.inputStream())
+//}
 
 android {
     namespace = "com.phoenixspark.connect"
@@ -14,7 +23,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
+//        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperties.getProperty("apiKey")}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -85,6 +94,10 @@ dependencies {
 //    implementation (libs.androidx.navigation.runtime.ktx.v276)
     implementation (libs.gson) // For serializing Base object
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    kapt("androidx.room:room-compiler:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
 
 
 }

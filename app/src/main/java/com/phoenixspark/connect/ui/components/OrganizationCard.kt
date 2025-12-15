@@ -25,6 +25,15 @@ import androidx.core.graphics.toColorInt
 import coil.compose.AsyncImage
 import com.phoenixspark.connect.data.Organization
 
+fun parseColorSafe(colorString: String?, fallback: Color): Color {
+    return colorString?.takeIf { it.isNotBlank() }?.let {
+        try {
+            Color(android.graphics.Color.parseColor(it))
+        } catch (e: Exception) {
+            fallback
+        }
+    } ?: fallback
+}
 @Composable
 fun OrganizationCard(
     organization: Organization,
@@ -42,9 +51,7 @@ fun OrganizationCard(
             )
             .border(
                 width = 1.dp,
-                color = organization.secondaryColor?.let {
-                    Color(android.graphics.Color.parseColor(it))
-                } ?: organization.type.color,
+                color = parseColorSafe(organization.secondaryColor, organization.type.color),
                 shape = RoundedCornerShape(16.dp)
             ),
         shape = RoundedCornerShape(16.dp),

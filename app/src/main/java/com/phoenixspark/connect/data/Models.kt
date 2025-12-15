@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.phoenixspark.connect.TableData
+import com.phoenixspark.connect.TileConfig
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -55,6 +56,7 @@ data class PageCards(
     val show_email: Boolean,
     val show_tables: Boolean,
     val tableData: List<TableData> = emptyList(),
+    val tilesConfig: List<TileConfig> = emptyList()
 )
 
 enum class OrganizationType(

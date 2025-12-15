@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -32,6 +33,7 @@ import coil.compose.AsyncImage
 import com.phoenixspark.connect.Base
 import com.phoenixspark.connect.SupabaseClient
 import com.phoenixspark.connect.data.*
+import com.phoenixspark.connect.data.repository.DataRepository
 import com.phoenixspark.connect.ui.components.*
 import kotlinx.coroutines.launch
 
@@ -39,7 +41,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun BaseDetailScreen(
     base: Base,
-    onBackPressed: () -> Unit = {}
+    onBackPressed: () -> Unit = {},
+    dataRepository: DataRepository? = null
 ) {
     var searchQueryName by remember { mutableStateOf("") }
     var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
@@ -53,9 +56,10 @@ fun BaseDetailScreen(
     var fields by remember { mutableStateOf<PageCards?>(null) }
     var showOrganizationDetail by remember { mutableStateOf(false) }
     var selectedTile by remember { mutableStateOf<BaseTile?>(null) }
-
+    print("PageCards: $fields")
     val scope = rememberCoroutineScope()
-
+    val context = LocalContext.current
+    val repository = dataRepository ?: remember{ DataRepository(context) }
     fun convertStringToOrganizationType(typeString: String): OrganizationType {
         return when (typeString.uppercase()) {
             "WING" -> OrganizationType.WING
@@ -126,7 +130,64 @@ fun BaseDetailScreen(
                     )
                 }
             } catch (e: Exception) {
-                errorMessage = "Failed to load organizations: ${e.message}"
+                println("⚠️ Network failed: ${e.message}, trying cache...")
+                try {
+                    // Load from cache
+                    val orgResponse = repository.getOrganizationsByBaseSync(base.id)
+                    organizations = orgResponse.sortedBy { it.name }.map { orgResponse ->
+                        Organization(
+                            id = orgResponse.id,
+                            name = orgResponse.name,
+                            description = orgResponse.description,
+                            contact = orgResponse.contact,
+                            type = convertStringToOrganizationType(orgResponse.type),
+                            baseId = orgResponse.base_id,
+                            webUrl = orgResponse.web_url,
+                            imageUrl = orgResponse.image_url,
+                            primaryColor = orgResponse.primary_color,
+                            secondaryColor = orgResponse.secondary_color,
+                            textColor = orgResponse.text_color,
+                            email = orgResponse.email,
+                            building_number = orgResponse.building_number,
+                            address = orgResponse.address,
+                            links = orgResponse.links,
+                            useTable = orgResponse.use_tables,
+                            tableData = orgResponse.table_data,
+                        )
+                    }
+
+                    baseDetails = repository.getBaseDetails(base.id)?.let { detail ->
+                        BaseDetails(
+                            id = detail.id,
+                            imageUrl = detail.image_url,
+                            phone = detail.phone,
+                            email = detail.email,
+                            commander = detail.commander,
+                            motto = detail.motto,
+                            population = detail.population,
+                            userId = detail.user_id,
+                        )
+                    }
+                    fields = repository.getPageCards(base.id)?.let { appfields ->
+                        PageCards(
+                            id = appfields.id,
+                            base_id = appfields.base_id,
+                            org_id = appfields.org_id,
+                            show_name = appfields.show_name,
+                            show_motto = appfields.show_motto,
+                            show_commander = appfields.show_commander,
+                            show_phone = appfields.show_phone,
+                            show_email = appfields.show_email,
+                            show_tables = appfields.show_tables,
+                            tableData = appfields.table_data,
+                            tilesConfig = appfields.tiles_config
+                        )
+                    }
+
+                    println("✅ Loaded ${organizations.size} orgs from cache")
+                } catch (cacheError: Exception) {
+                    errorMessage = "Failed to load: ${e.message}"
+                }
             } finally {
                 isLoading = false
             }
@@ -387,7 +448,7 @@ fun BaseDetailScreen(
             if (selectedTab == "home") {
                 item {
                     TileGrid(
-                        tiles = getDefaultBaseTiles(),
+                        tiles = getDefaultBaseTiles(fields?.tilesConfig ?: emptyList()),
                         onTileClick = { tile ->
                             selectedTile = tile
                         }
@@ -591,4 +652,208 @@ fun BaseDetailScreen(
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BaseDetailScreenWithOffline(
+    base: Base,
+    onBackPressed: () -> Unit = {},
+    isOnline: Boolean,  // Changed from NetworkMonitor
+    dataRepository: DataRepository,
+) {
+    var searchQueryName by remember { mutableStateOf("") }
+    var organizations by remember { mutableStateOf<List<Organization>>(emptyList()) }
+    var selectedFilter by remember { mutableStateOf<OrganizationType?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var selectedOrganization by remember { mutableStateOf<Organization?>(null) }
+    var showModal by remember { mutableStateOf(false) }
+    var baseDetails by remember { mutableStateOf<BaseDetails?>(null) }
+    var selectedTab by remember { mutableStateOf("home") }
+    var fields by remember { mutableStateOf<PageCards?>(null) }
+    var showOrganizationDetail by remember { mutableStateOf(false) }
+    var selectedTile by remember { mutableStateOf<BaseTile?>(null) }
+
+    val scope = rememberCoroutineScope()
+
+    fun convertStringToOrganizationType(typeString: String): OrganizationType {
+        return when (typeString.uppercase()) {
+            "WING" -> OrganizationType.WING
+            "GROUP" -> OrganizationType.GROUP
+            "SQUADRON" -> OrganizationType.SQUADRON
+            "AGENCY" -> OrganizationType.AGENCY
+            "ORGANIZATION" -> OrganizationType.ORGANIZATION
+            "SUPPORT" -> OrganizationType.SUPPORT
+            else -> OrganizationType.ORGANIZATION
+        }
+    }
+
+    fun loadOrganizations() {
+        scope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                if (isOnline) {
+                    // Try to fetch from network
+                    val response = SupabaseClient.getOrganizationsByBase(base.id)
+                    organizations = response.sortedBy { it.name }.map { orgResponse ->
+                        Organization(
+                            id = orgResponse.id,
+                            name = orgResponse.name,
+                            description = orgResponse.description,
+                            contact = orgResponse.contact,
+                            type = convertStringToOrganizationType(orgResponse.type),
+                            baseId = orgResponse.base_id,
+                            webUrl = orgResponse.web_url,
+                            imageUrl = orgResponse.image_url,
+                            primaryColor = orgResponse.primary_color,
+                            secondaryColor = orgResponse.secondary_color,
+                            textColor = orgResponse.text_color,
+                            email = orgResponse.email,
+                            building_number = orgResponse.building_number,
+                            address = orgResponse.address,
+                            links = orgResponse.links,
+                            useTable = orgResponse.use_tables,
+                            tableData = orgResponse.table_data,
+                        )
+                    }
+
+                    val details = SupabaseClient.getBaseDetails(base.id)
+                    baseDetails = details.firstOrNull()?.let { detail ->
+                        BaseDetails(
+                            id = detail.id,
+                            imageUrl = detail.image_url,
+                            phone = detail.phone,
+                            email = detail.email,
+                            commander = detail.commander,
+                            motto = detail.motto,
+                            population = detail.population,
+                            userId = detail.user_id,
+                        )
+                    }
+
+                    val appFields = SupabaseClient.getAppFields(base.id)
+                    fields = appFields.firstOrNull()?.let { appfields ->
+                        PageCards(
+                            id = appfields.id,
+                            base_id = appfields.base_id,
+                            org_id = appfields.org_id,
+                            show_name = appfields.show_name,
+                            show_motto = appfields.show_motto,
+                            show_commander = appfields.show_commander,
+                            show_phone = appfields.show_phone,
+                            show_email = appfields.show_email,
+                            show_tables = appfields.show_tables,
+                            tableData = appfields.table_data,
+                        )
+                    }
+                } else {
+                    // Load from local database
+                    val orgResponse = dataRepository.getOrganizationsByBaseSync(base.id)
+                    organizations = orgResponse.sortedBy { it.name }.map { orgResponse ->
+                        Organization(
+                            id = orgResponse.id,
+                            name = orgResponse.name,
+                            description = orgResponse.description,
+                            contact = orgResponse.contact,
+                            type = convertStringToOrganizationType(orgResponse.type),
+                            baseId = orgResponse.base_id,
+                            webUrl = orgResponse.web_url,
+                            imageUrl = orgResponse.image_url,
+                            primaryColor = orgResponse.primary_color,
+                            secondaryColor = orgResponse.secondary_color,
+                            textColor = orgResponse.text_color,
+                            email = orgResponse.email,
+                            building_number = orgResponse.building_number,
+                            address = orgResponse.address,
+                            links = orgResponse.links,
+                            useTable = orgResponse.use_tables,
+                            tableData = orgResponse.table_data,
+                        )
+                    }
+
+                    val detailResponse = dataRepository.getBaseDetails(base.id)
+                    baseDetails = detailResponse?.let { detail ->
+                        BaseDetails(
+                            id = detail.id,
+                            imageUrl = detail.image_url,
+                            phone = detail.phone,
+                            email = detail.email,
+                            commander = detail.commander,
+                            motto = detail.motto,
+                            population = detail.population,
+                            userId = detail.user_id,
+                        )
+                    }
+
+                    val fieldsResponse = dataRepository.getPageCards(base.id)
+                    fields = fieldsResponse?.let { appfields ->
+                        PageCards(
+                            id = appfields.id,
+                            base_id = appfields.base_id,
+                            org_id = appfields.org_id,
+                            show_name = appfields.show_name,
+                            show_motto = appfields.show_motto,
+                            show_commander = appfields.show_commander,
+                            show_phone = appfields.show_phone,
+                            show_email = appfields.show_email,
+                            show_tables = appfields.show_tables,
+                            tableData = appfields.table_data,
+                            tilesConfig = appfields.tiles_config,
+                        )
+                    }
+
+                    if (organizations.isEmpty()) {
+                        errorMessage = "No cached data available. Connect to internet and refresh."
+                    }
+                }
+            } catch (e: Exception) {
+                println("Error loading data: ${e.message}")
+                errorMessage = if (isOnline) {
+                    "Failed to load from server: ${e.message}"
+                } else {
+                    "No cached data available"
+                }
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        loadOrganizations()
+    }
+
+    // Rest of the screen implementation stays the same...
+    // (Keep your existing UI code for showing organizations, tiles, etc.)
+
+    // Show organization detail screen if selected
+    if (showOrganizationDetail && selectedOrganization != null) {
+        OrganizationDetailScreen(
+            organization = selectedOrganization!!,
+            onBackPressed = {
+                showOrganizationDetail = false
+                selectedOrganization = null
+            }
+        )
+        return
+    }
+
+    // Show tile detail screen if selected
+    if (selectedTile != null && baseDetails != null) {
+        TileDetailScreen(
+            tile = selectedTile!!,
+            baseDetails = baseDetails!!,
+            fields = fields,
+            onBackPressed = { selectedTile = null }
+        )
+        return
+    }
+    BaseDetailScreen(
+        base = base,
+        onBackPressed = onBackPressed,
+    )
+    // Continue with your existing BaseDetailScreen UI code...
+    // (Use the same UI from your current BaseDetailScreen but with the offline-capable loadOrganizations)
 }

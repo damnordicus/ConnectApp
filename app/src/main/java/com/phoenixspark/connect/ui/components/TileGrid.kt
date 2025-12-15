@@ -1,5 +1,6 @@
 package com.phoenixspark.connect.ui.components
 
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,8 +19,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.phoenixspark.connect.TileConfig
 import com.phoenixspark.connect.data.BaseTile
 import com.phoenixspark.connect.data.TileType
+import com.phoenixspark.connect.toAndroidColor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -31,11 +34,12 @@ fun TileGrid(
     onTileClick: (BaseTile) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    Log.d("TileGrid", "Rendering ${tiles.size} tiles")
+
     // Create rows of 2 tiles each
     Column(
         modifier = modifier
             .fillMaxWidth()
-//            .background(color = MaterialTheme.colorScheme.background)
             .padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -83,14 +87,6 @@ fun TileCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-//                .background(
-//                    brush = Brush.verticalGradient(
-//                        colors = listOf(
-//                            tile.color.copy(alpha = 0.1f),
-//                            tile.color.copy(alpha = 0.05f)
-//                        )
-//                    )
-//                )
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -128,8 +124,68 @@ fun TileCard(
     }
 }
 
+// Helper function to map tile type string to TileType enum
+fun String.toTileType(): TileType {
+    return when (this.lowercase()) {
+        "text", "base_info", "base info" -> TileType.BASE_INFO
+        "gate_hours", "gate hours" -> TileType.GATE_HOURS
+        "emergency", "emergency_contacts" -> TileType.EMERGENCY_CONTACTS
+        "commander", "commander_hotline" -> TileType.COMMANDER_HOTLINE
+        "dining", "dining_facilities" -> TileType.DINING_FACILITIES
+        "gym", "gym_hours" -> TileType.GYM_HOURS
+        "events" -> TileType.EVENTS
+        "map" -> TileType.MAP
+        else -> TileType.BASE_INFO
+    }
+}
+
+// Helper function to map tile type to icon
+fun TileType.toIcon(): ImageVector {
+    return when (this) {
+        TileType.BASE_INFO -> Icons.Default.Info
+        TileType.GATE_HOURS -> Icons.Default.Lock
+        TileType.EMERGENCY_CONTACTS -> Icons.Default.Emergency
+        TileType.COMMANDER_HOTLINE -> Icons.Default.Campaign
+        TileType.DINING_FACILITIES -> Icons.Default.Restaurant
+        TileType.GYM_HOURS -> Icons.Default.FitnessCenter
+        TileType.EVENTS -> Icons.Default.Event
+        TileType.MAP -> Icons.Default.Map
+    }
+}
+
+// Convert TileConfig list to BaseTile list
+fun convertTileConfigToBaseTiles(tilesConfig: List<TileConfig>): List<BaseTile> {
+    Log.d("BaseTiles", "Converting ${tilesConfig.size} TileConfig items to BaseTiles")
+
+    return tilesConfig
+        .filter { it.visible } // Only include visible tiles
+        .map { config ->
+            val tileType = config.type.toTileType()
+            val color = config.color.toAndroidColor()
+
+            BaseTile(
+                id = config.id,
+                title = config.title,
+                icon = tileType.toIcon(),
+                color = color,
+                type = tileType
+            )
+        }
+}
+
 // Helper function to create default tiles
-fun getDefaultBaseTiles(): List<BaseTile> {
+fun getDefaultBaseTiles(tilesConfig: List<TileConfig> = emptyList()): List<BaseTile> {
+    Log.d("BaseTiles", "tilesConfig received: $tilesConfig")
+    Log.d("BaseTiles", "tilesConfig size: ${tilesConfig.size}")
+
+    // If we have tiles from the database, use those
+    if (tilesConfig.isNotEmpty()) {
+        Log.d("BaseTiles", "Using ${tilesConfig.size} tiles from database")
+        return convertTileConfigToBaseTiles(tilesConfig)
+    }
+
+    // Otherwise, return default tiles
+    Log.d("BaseTiles", "Using default tiles")
     return listOf(
         BaseTile(
             id = "base_info",
