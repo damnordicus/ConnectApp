@@ -89,5 +89,6 @@ enum class TileType {
     DINING_FACILITIES,
     GYM_HOURS,
     EVENTS,
-    MAP
+    MAP,
+    CUSTOM
 }

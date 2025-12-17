@@ -30,13 +30,17 @@ data class TableData(
     val data: List<List<String>>
 )
 
+data class TileSection(
+    val type: String,
+    val content: Any
+)
+
 data class TileConfig(
     val id: String,
-    val type: String,
     val color: String,
     val title: String,
-    val content: Any? = null,  // Can be String, List, or other types
-    val visible: Boolean = true
+    val visible: Boolean = true,
+    val sections: List<TileSection> = emptyList()
 )
 
 data class PageCardsResponse(

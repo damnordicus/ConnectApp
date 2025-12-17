@@ -150,24 +150,41 @@ fun TileType.toIcon(): ImageVector {
         TileType.GYM_HOURS -> Icons.Default.FitnessCenter
         TileType.EVENTS -> Icons.Default.Event
         TileType.MAP -> Icons.Default.Map
+        TileType.CUSTOM -> Icons.Default.Info
+    }
+}
+
+fun inferTileTypeFromTitle(title: String): TileType {
+    val lowerTitle = title.lowercase()
+    return when {
+        lowerTitle.contains("base") && lowerTitle.contains("info") -> TileType.BASE_INFO
+        lowerTitle.contains("gate") -> TileType.GATE_HOURS
+        lowerTitle.contains("emergency") -> TileType.EMERGENCY_CONTACTS
+        lowerTitle.contains("commander") -> TileType.COMMANDER_HOTLINE
+        lowerTitle.contains("dining") || lowerTitle.contains("food") -> TileType.DINING_FACILITIES
+        lowerTitle.contains("gym") || lowerTitle.contains("fitness") -> TileType.GYM_HOURS
+        lowerTitle.contains("event") -> TileType.EVENTS
+        lowerTitle.contains("map") -> TileType.MAP
+        lowerTitle.contains("contact") -> TileType.EMERGENCY_CONTACTS
+        else -> TileType.CUSTOM
     }
 }
 
 // Convert TileConfig list to BaseTile list
 fun convertTileConfigToBaseTiles(tilesConfig: List<TileConfig>): List<BaseTile> {
     Log.d("BaseTiles", "Converting ${tilesConfig.size} TileConfig items to BaseTiles")
+    Log.d("TileDetailScreen", "Looking for tile.id: '${tilesConfig[2].id}' (type: ${tilesConfig[2].id::class.simpleName}")
 
     return tilesConfig
         .filter { it.visible } // Only include visible tiles
         .map { config ->
-            val tileType = config.type.toTileType()
-            val color = config.color.toAndroidColor()
+            val tileType = inferTileTypeFromTitle(config.title)
 
             BaseTile(
                 id = config.id,
                 title = config.title,
                 icon = tileType.toIcon(),
-                color = color,
+                color = config.color.toAndroidColor(),
                 type = tileType
             )
         }

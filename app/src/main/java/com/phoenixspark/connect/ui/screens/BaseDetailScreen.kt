@@ -127,6 +127,7 @@ fun BaseDetailScreen(
                         show_email = appfields.show_email,
                         show_tables = appfields.show_tables,
                         tableData = appfields.table_data,
+                        tilesConfig = appfields.tiles_config,
                     )
                 }
             } catch (e: Exception) {
@@ -746,6 +747,7 @@ fun BaseDetailScreenWithOffline(
                             show_email = appfields.show_email,
                             show_tables = appfields.show_tables,
                             tableData = appfields.table_data,
+                            tilesConfig = appfields.tiles_config,
                         )
                     }
                 } else {
